@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"fmt"
 
 	"github.com/navidrome/navidrome/conf"
 	"github.com/navidrome/navidrome/consts"
@@ -15,6 +16,10 @@ import (
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/utils"
+	"github.com/andybalholm/cascadia"
+	"golang.org/x/net/html"
+
+
 )
 
 const (
@@ -213,6 +218,13 @@ func (l *lastfmAgent) callArtistGetInfo(ctx context.Context, name string, mbid s
 		log.Error(ctx, "Error calling LastFM/artist.getInfo", "artist", name, "mbid", mbid, err)
 		return nil, err
 	}
+
+
+	if url, _ := StealArtistImage(a.URL); url != "" {
+		a.Image =  append(a.Image, ExternalImage{URL: url, Size: "600"});
+
+	}
+
 	return a, nil
 }
 
@@ -320,3 +332,35 @@ func init() {
 		}
 	})
 }
+
+//nolint:gochecknoglobals
+var artistOpenGraphQuery = cascadia.MustCompile(`html > head > meta[property="og:image"]`)
+
+func StealArtistImage(artistURL string) (string, error) {
+	resp, err := http.Get(artistURL) //nolint:gosec
+	if err != nil {
+		return "", fmt.Errorf("get artist url: %w", err)
+	}
+	defer resp.Body.Close()
+
+	node, err := html.Parse(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("parse html: %w", err)
+	}
+
+	n := cascadia.Query(node, artistOpenGraphQuery)
+	if n == nil {
+		return "", nil
+	}
+
+	var imageURL string
+	for _, attr := range n.Attr {
+		if attr.Key == "content" {
+			imageURL = attr.Val
+			break
+		}
+	}
+
+	return imageURL, nil
+}
+
