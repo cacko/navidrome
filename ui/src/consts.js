@@ -19,8 +19,8 @@ DraggableTypes.ALL.push(
   DraggableTypes.ARTIST
 )
 
-export const DEFAULT_SHARE_BITRATE = 128
+export const DEFAULT_SHARE_BITRATE = 256
 
 export const BITRATE_CHOICES = [
-  32, 48, 64, 80, 96, 112, 128, 160, 192, 256, 320,
+  32, 48, 64, 80, 96, 112, 128, 160, 192, 256, 320, 512,
 ].map((b) => ({ id: b, name: b.toString() }))
