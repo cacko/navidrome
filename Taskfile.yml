@@ -1,0 +1,21 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  GREETING: Hello, World!
+
+tasks:
+  push:
+    cmds:
+      - gcom 
+      - git push -u origin master
+
+  pull:
+    cmds:
+      - git reset --hard
+      - git pull
+  build:
+    desc: build da shiut
+    cmds:
+      - NODE_OPTIONS=--max-old-space-size=8192 make buildall
