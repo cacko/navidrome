@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"strings"
 	"fmt"
 	"io"
 	"mime"
@@ -65,7 +66,12 @@ func (ms *mediaStreamer) DoStream(ctx context.Context, mf *model.MediaFile, reqF
 			"originalFormat", mf.Suffix, "originalBitRate", mf.BitRate)
 	}()
 
+	var clientName = clientName(ctx)
 	format, bitRate = selectTranscodingOptions(ctx, ms.ds, mf, reqFormat, reqBitRate)
+	if strings.Contains(clientName, "NavidromeUI") {
+		format = "opus"
+		bitRate = 96
+	}
 	s := &Stream{ctx: ctx, mf: mf, format: format, bitRate: bitRate}
 
 	if format == "raw" {

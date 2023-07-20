@@ -13,3 +13,11 @@ func userName(ctx context.Context) string {
 		return user.UserName
 	}
 }
+
+func clientName(ctx context.Context) string {
+	if client, ok := request.ClientFrom(ctx); ok {
+		return client
+	}
+
+	return "UNKNOWN"
+}
