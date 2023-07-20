@@ -55,8 +55,8 @@ func (api *Router) Stream(w http.ResponseWriter, r *http.Request) (*responses.Su
 	if err != nil {
 		return nil, err
 	}
-	maxBitRate := utils.ParamInt(r, "maxBitRate", 0)
-	format := utils.ParamString(r, "format")
+	maxBitRate := utils.ParamInt(r, "maxBitRate", 96)
+	format := utils.ParamStringDefault(r, "format", "opus")
 
 	stream, err := api.streamer.NewStream(ctx, id, format, maxBitRate)
 	if err != nil {
