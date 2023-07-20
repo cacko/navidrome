@@ -68,7 +68,7 @@ func (ms *mediaStreamer) DoStream(ctx context.Context, mf *model.MediaFile, reqF
 
 	var clientName = clientName(ctx)
 	format, bitRate = selectTranscodingOptions(ctx, ms.ds, mf, reqFormat, reqBitRate)
-	if strings.Contains(clientName, "NavidromeUI") {
+	if strings.Contains(clientName, "NavidromeUI") || userName(ctx) == "UNKNOWN" {
 		format = "opus"
 		bitRate = 96
 	}
