@@ -99,7 +99,7 @@ var (
 		{
 			"name":           "opus audio",
 			"targetFormat":   "opus",
-			"defaultBitRate": 128,
+			"defaultBitRate": 512,
 			"command":        "ffmpeg -i %s -map 0:a:0 -b:a %bk -v 0 -c:a libopus -f opus -",
 		},
 		{
