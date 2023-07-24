@@ -88,7 +88,7 @@ export default {
     },
     MuiMenuItem: {
       root: {
-        fontSize: '0.875rem',
+        fontSize: '1rem',
       },
     },
     MuiDivider: {
@@ -149,7 +149,7 @@ export default {
       },
       head: {
         borderBottom: '1px solid #282828',
-        fontSize: '0.75rem',
+        fontSize: '1rem',
         textTransform: 'uppercase',
         letterSpacing: 1.2,
       },
@@ -204,7 +204,7 @@ export default {
         color: '#fff',
       },
       details: {
-        fontSize: '.875rem',
+        fontSize: '1rem',
         minWidth: '75vw',
         color: 'rgba(255,255,255, 0.8)',
       },
@@ -245,13 +245,13 @@ export default {
     NDAudioPlayer: {
       audioTitle: {
         color: '#fff',
-        fontSize: '0.875rem',
+        fontSize: '1rem',
       },
       songTitle: {
         fontWeight: 400,
       },
       songInfo: {
-        fontSize: '0.675rem',
+        fontSize: '1rem',
         color: '#b3b3b3',
       },
       player: {
