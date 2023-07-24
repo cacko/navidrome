@@ -128,6 +128,7 @@ export default {
     },
     MuiTableRow: {
       root: {
+        fontFamily:'Rubik Mono One',
         padding: '10px 0',
         transition: 'background-color .3s ease',
         '&:hover': {
