@@ -60,7 +60,7 @@ const musicListActions = {
 export default {
   themeName: 'Spotify-ish',
   typography: {
-    fontFamily: 'Syne Mono',
+    fontFamily: 'Rubik Mono One',
     h6: {
       fontSize: '1rem', // AppBar title
     },
@@ -128,7 +128,6 @@ export default {
     },
     MuiTableRow: {
       root: {
-        fontFamily:'Rubik Mono One',
         padding: '10px 0',
         transition: 'background-color .3s ease',
         '&:hover': {
