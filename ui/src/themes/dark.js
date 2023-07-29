@@ -60,7 +60,7 @@ const musicListActions = {
 export default {
   themeName: 'Spotify-ish',
   typography: {
-    fontFamily: 'Rubik Mono One',
+    fontFamily: 'Chivo Mono',
     h6: {
       fontSize: '1rem', // AppBar title
     },

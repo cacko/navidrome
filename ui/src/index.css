@@ -1,13 +1,13 @@
 body {
   margin: 0;
   font-size: 16px;
-  font-family: 'Syne Mono';
+  font-family: 'Chivo Mono';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-  font-family: 'Syne Mono';
+  font-family: 'Chivo Mono';
 }
 
 .rc-slider {
