@@ -62,6 +62,7 @@ func (api *Router) CreateShare(r *http.Request) (*responses.Subsonic, error) {
 	share := &model.Share{
 		Description: description,
 		ExpiresAt:   expires,
+		Downloadable: true,
 		ResourceIDs: strings.Join(ids, ","),
 	}
 
@@ -93,6 +94,7 @@ func (api *Router) UpdateShare(r *http.Request) (*responses.Subsonic, error) {
 	share := &model.Share{
 		ID:          id,
 		Description: description,
+		Downloadable: true,
 		ExpiresAt:   expires,
 	}
 
