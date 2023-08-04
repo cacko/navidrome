@@ -142,12 +142,18 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 	if shareInfo == nil || shareInfo.ID == "" {
 		return
 	}
+	data["ShareType"] = "music:song"
+	data["ShareDuration"] = float32(0)
 	sd := shareData{
 		ID:           shareInfo.ID,
 		Description:  shareInfo.Description,
 		Downloadable: shareInfo.Downloadable,
 	}
 	sd.Tracks = slice.Map(shareInfo.Tracks, func(mf model.MediaFile) shareTrack {
+		data["ShareDuration"]+= data["ShareDuration"] +  mf.Duration
+		data["ShareAlbum"] = mf.Album
+		data["ShareARtist"] = mf.Artist
+		data["ShareReleaseDate"] = mf.ReleaseDate
 		return shareTrack{
 			ID:        mf.ID,
 			Title:     mf.Title,
@@ -158,6 +164,11 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 		}
 	})
 
+	if len(sd.Tracks) > 1{
+		data["ShareType"] = "music:album"
+		data["ShareDescription"] = data["ShareAlbum"]
+	}
+
 	shareInfoJson, err := json.Marshal(sd)
 	if err != nil {
 		log.Error(ctx, "Error converting shareInfo to JSON", "config", shareInfo, err)
@@ -165,11 +176,6 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 		log.Trace(ctx, "Injecting shareInfo in index.html", "config", string(shareInfoJson))
 	}
 
-	if shareInfo.Description != "" {
-		data["ShareDescription"] = shareInfo.Description
-	} else {
-		data["ShareDescription"] = shareInfo.Contents
-	}
 	data["ShareURL"] = shareInfo.URL
 	data["ShareImageURL"] = shareInfo.ImageURL
 	data["ShareInfo"] = string(shareInfoJson)

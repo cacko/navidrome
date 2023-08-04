@@ -1,7 +1,7 @@
 {
- "name": "Navidrome",
- "short_name": "Navidrome",
- "description": "Navidrome, an open source web-based music collection server and streamer",
+ "name": "cacko-music",
+ "short_name": "mucac",
+ "description": "cacko music is for muusicer",
  "categories": ["music", "entertainment"],
  "display": "standalone",
  "start_url": "./",
