@@ -171,11 +171,12 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 	if len(sd.Tracks) > 1{
 		data["ShareType"] = "music:album"
 		data["ShareTitle"] = data["ShareAlbum"]
-		data["Description"] = fmt.Sprintf("album by %s", data["ShareArtist"])
+		data["ShareDescription"] = fmt.Sprintf("album by %s", data["ShareArtist"])
 	} else {
 		data["ShareType"] = "music:song"
-		data["Title"] = sd.Tracks[0].Title
-		data["Description"] = fmt.Sprintf("song by by %s", data["ShareArtist"])
+		data["ShareTitle"] = sd.Tracks[0].Title
+		data["ShareSong"] = sd.Tracks[0].Title
+		data["ShareDescription"] = fmt.Sprintf("song by by %s", data["ShareArtist"])
 	}
 
 	shareInfoJson, err := json.Marshal(sd)
