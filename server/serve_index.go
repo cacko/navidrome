@@ -143,7 +143,6 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 	if shareInfo == nil || shareInfo.ID == "" {
 		return
 	}
-	data["ShareType"] = "music:song"
 	duration := float32(0)
 	sd := shareData{
 		ID:           shareInfo.ID,
@@ -155,6 +154,7 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 		data["ShareAlbum"] = mf.Album
 		data["ShareArtist"] = mf.Artist
 		data["ShareReleaseDate"] = mf.ReleaseDate
+
 		return shareTrack{
 			ID:        mf.ID,
 			Title:     mf.Title,
@@ -167,9 +167,15 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 
 	data["ShareDuration"] = fmt.Sprintf("%.f", duration)
 
+
 	if len(sd.Tracks) > 1{
 		data["ShareType"] = "music:album"
-		data["ShareDescription"] = data["ShareAlbum"]
+		data["ShareTitle"] = data["ShareAlbum"]
+		data["Description"] = fmt.Sprintf("album by %s", data["ShareArtist"])
+	} else {
+		data["ShareType"] = "music:song"
+		data["Title"] = sd.Tracks[0].Title
+		data["Description"] = fmt.Sprintf("song by by %s", data["ShareArtist"])
 	}
 
 	shareInfoJson, err := json.Marshal(sd)
