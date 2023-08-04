@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"io"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"path"
@@ -143,16 +144,16 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 		return
 	}
 	data["ShareType"] = "music:song"
-	data["ShareDuration"] = float32(0)
+	duration := float32(0)
 	sd := shareData{
 		ID:           shareInfo.ID,
 		Description:  shareInfo.Description,
 		Downloadable: shareInfo.Downloadable,
 	}
 	sd.Tracks = slice.Map(shareInfo.Tracks, func(mf model.MediaFile) shareTrack {
-		data["ShareDuration"]+= data["ShareDuration"] +  mf.Duration
+		duration = duration + mf.Duration
 		data["ShareAlbum"] = mf.Album
-		data["ShareARtist"] = mf.Artist
+		data["ShareArtist"] = mf.Artist
 		data["ShareReleaseDate"] = mf.ReleaseDate
 		return shareTrack{
 			ID:        mf.ID,
@@ -163,6 +164,8 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 			UpdatedAt: mf.UpdatedAt,
 		}
 	})
+
+	data["ShareDuration"] = fmt.Sprintf("%.f", duration)
 
 	if len(sd.Tracks) > 1{
 		data["ShareType"] = "music:album"
