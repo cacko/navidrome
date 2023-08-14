@@ -94,19 +94,19 @@ var (
 			"name":           "mp3 audio",
 			"targetFormat":   "mp3",
 			"defaultBitRate": 192,
-			"command":        "ffmpeg -i %s -map 0:a:0 -b:a %bk -v 0 -f mp3 -",
+			"command":        "ffmpeg -i %s -map 0:a -b:a %bk -f mp3 -",
 		},
 		{
 			"name":           "opus audio",
 			"targetFormat":   "opus",
 			"defaultBitRate": 512,
-			"command":        "ffmpeg -i %s -map 0:a:0 -b:a %bk -v 0 -c:a libopus -ar 48000 -f opus -",
+			"command":        "ffmpeg -i %s -map 0:a -c:a libopus -b:a %bk -ac 2 -ar 48000 -f opus -",
 		},
 		{
 			"name":           "aac audio",
 			"targetFormat":   "aac",
 			"defaultBitRate": 256,
-			"command":        "ffmpeg -i %s -map 0:a:0 -b:a %bk -v 0 -c:a aac -ar 48000 -f adts -",
+			"command":        "ffmpeg -i %s -map 0:a -c:a aac -b:a %bk -ac 2 -ar 48000 -f adts -",
 		},
 	}
 

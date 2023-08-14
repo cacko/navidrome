@@ -1,16 +1,17 @@
 # https://taskfile.dev
 
-version: '3'
+version: "3"
 
 vars:
   GREETING: Hello, World!
 
 tasks:
   push:
+    desc: commit and pushes current changes
     cmds:
-      - gcom 
-      - git push -u origin master
-
+      - git add .  || true
+      - git commit -am "$(curl -s https://commit.cacko.net/index.txt)" || true
+      - git push || true
   pull:
     cmds:
       - git reset --hard
