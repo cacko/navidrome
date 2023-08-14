@@ -100,13 +100,13 @@ var (
 			"name":           "opus audio",
 			"targetFormat":   "opus",
 			"defaultBitRate": 512,
-			"command":        "ffmpeg -i %s -map 0:a:0 -b:a %bk -v 0 -c:a libopus -f opus -",
+			"command":        "ffmpeg -i %s -map 0:a:0 -b:a %bk -v 0 -c:a libopus -ar 48000 -f opus -",
 		},
 		{
 			"name":           "aac audio",
 			"targetFormat":   "aac",
 			"defaultBitRate": 256,
-			"command":        "ffmpeg -i %s -map 0:a:0 -b:a %bk -v 0 -c:a aac -f adts -",
+			"command":        "ffmpeg -i %s -map 0:a:0 -b:a %bk -v 0 -c:a aac -ar 48000 -f adts -",
 		},
 	}
 
