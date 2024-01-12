@@ -14,7 +14,7 @@ import (
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/server/public"
 	"github.com/navidrome/navidrome/server/subsonic/responses"
-	"github.com/navidrome/navidrome/utils"
+	"github.com/navidrome/navidrome/utils/req"
 )
 
 type searchParams struct {
@@ -28,18 +28,19 @@ type searchParams struct {
 }
 
 func (api *Router) getParams(r *http.Request) (*searchParams, error) {
+	p := req.Params(r)
 	var err error
 	sp := &searchParams{}
-	sp.query, err = requiredParamString(r, "query")
+	sp.query, err = p.String("query")
 	if err != nil {
 		return nil, err
 	}
-	sp.artistCount = utils.ParamInt(r, "artistCount", 20)
-	sp.artistOffset = utils.ParamInt(r, "artistOffset", 0)
-	sp.albumCount = utils.ParamInt(r, "albumCount", 20)
-	sp.albumOffset = utils.ParamInt(r, "albumOffset", 0)
-	sp.songCount = utils.ParamInt(r, "songCount", 20)
-	sp.songOffset = utils.ParamInt(r, "songOffset", 0)
+	sp.artistCount = p.IntOr("artistCount", 20)
+	sp.artistOffset = p.IntOr("artistOffset", 0)
+	sp.albumCount = p.IntOr("albumCount", 20)
+	sp.albumOffset = p.IntOr("albumOffset", 0)
+	sp.songCount = p.IntOr("songCount", 20)
+	sp.songOffset = p.IntOr("songOffset", 0)
 	return sp, nil
 }
 
@@ -110,7 +111,7 @@ func (api *Router) Search2(r *http.Request) (*responses.Subsonic, error) {
 			ArtistImageUrl: public.ImageURL(r, artist.CoverArtID(), 600),
 		}
 		if artist.Starred {
-			searchResult2.Artist[i].Starred = &as[i].StarredAt
+			searchResult2.Artist[i].Starred = as[i].StarredAt
 		}
 	}
 	searchResult2.Album = childrenFromAlbums(ctx, als)
@@ -133,7 +134,7 @@ func (api *Router) Search3(r *http.Request) (*responses.Subsonic, error) {
 	for i, artist := range as {
 		searchResult3.Artist[i] = toArtistID3(r, artist)
 	}
-	searchResult3.Album = childrenFromAlbums(ctx, als)
+	searchResult3.Album = buildAlbumsID3(ctx, als)
 	searchResult3.Song = childrenFromMediaFiles(ctx, mfs)
 	response.SearchResult3 = searchResult3
 	return response, nil

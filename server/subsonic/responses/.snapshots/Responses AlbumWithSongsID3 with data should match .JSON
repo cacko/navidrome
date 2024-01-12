@@ -8,8 +8,8 @@
     "id": "1",
     "name": "album",
     "artist": "artist",
-    "userRating": 0,
     "genre": "rock",
+    "userRating": 0,
     "genres": [
       {
         "name": "rock"
@@ -19,6 +19,23 @@
       }
     ],
     "musicBrainzId": "1234",
+    "isCompilation": true,
+    "sortName": "sorted album",
+    "discTitles": [
+      {
+        "disc": 1,
+        "title": "disc 1"
+      },
+      {
+        "disc": 2,
+        "title": "disc 2"
+      }
+    ],
+    "originalReleaseDate": {
+      "year": 1994,
+      "month": 2,
+      "day": 4
+    },
     "song": [
       {
         "id": "1",
@@ -29,14 +46,6 @@
         "track": 1,
         "year": 1985,
         "genre": "Rock",
-        "genres": [
-          {
-            "name": "rock"
-          },
-          {
-            "name": "progressive"
-          }
-        ],
         "coverArt": "1",
         "size": 8421341,
         "contentType": "audio/flac",
@@ -48,7 +57,26 @@
         "bitRate": 320,
         "isVideo": false,
         "bpm": 127,
-        "comment": "a comment"
+        "comment": "a comment",
+        "sortName": "sorted song",
+        "mediaType": "song",
+        "musicBrainzId": "4321",
+        "genres": [
+          {
+            "name": "rock"
+          },
+          {
+            "name": "progressive"
+          }
+        ],
+        "replayGain": {
+          "trackGain": 1,
+          "albumGain": 2,
+          "trackPeak": 3,
+          "albumPeak": 4,
+          "baseGain": 5,
+          "fallbackGain": 6
+        }
       }
     ]
   }

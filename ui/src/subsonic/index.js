@@ -27,7 +27,7 @@ const scrobble = (id, time, submission = true) =>
     url('scrobble', id, {
       ...(submission && time && { time }),
       submission,
-    })
+    }),
   )
 
 const nowPlaying = (id) => scrobble(id, null, false)
@@ -76,7 +76,7 @@ const streamUrl = (id, options) => {
       format: "opus",
       maxBitRate: 96,
       ...options,
-    })
+    }),
   )
 }
 
