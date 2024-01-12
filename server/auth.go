@@ -7,7 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"net/http"
+	"net"
+	"fmt"
 	"time"
 
 	"github.com/deluan/rest"
