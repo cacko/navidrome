@@ -9,8 +9,6 @@ import (
 	"errors"
 	"strings"
 	"net/http"
-	"net"
-	"fmt"
 	"time"
 
 	"github.com/deluan/rest"
