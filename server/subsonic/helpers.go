@@ -19,7 +19,7 @@ import (
 
 func newResponse() *responses.Subsonic {
 	return &responses.Subsonic{
-		Status:        "ok",
+		Status:        responses.StatusOK,
 		Version:       Version,
 		Type:          consts.AppName,
 		ServerVersion: consts.Version,
@@ -183,6 +183,7 @@ func childFromMediaFile(ctx context.Context, mf model.MediaFile) responses.Child
 		TrackPeak: mf.RgTrackPeak,
 		AlbumPeak: mf.RgAlbumPeak,
 	}
+	child.ChannelCount = int32(mf.Channels)
 	return child
 }
 
@@ -321,6 +322,7 @@ func buildAlbumID3(ctx context.Context, album model.Album) responses.AlbumID3 {
 	dir.IsCompilation = album.Compilation
 	dir.SortName = album.SortAlbumName
 	dir.OriginalReleaseDate = toItemDate(album.OriginalDate)
+	dir.ReleaseDate = toItemDate(album.ReleaseDate)
 	return dir
 }
 
