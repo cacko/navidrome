@@ -3,12 +3,13 @@ package lastfm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
-	"fmt"
 
+	"github.com/andybalholm/cascadia"
 	"github.com/navidrome/navidrome/conf"
 	"github.com/navidrome/navidrome/consts"
 	"github.com/navidrome/navidrome/core/agents"
@@ -16,10 +17,7 @@ import (
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/utils/cache"
-	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
-
-
 )
 
 const (
@@ -219,9 +217,8 @@ func (l *lastfmAgent) callArtistGetInfo(ctx context.Context, name string, mbid s
 		return nil, err
 	}
 
-
 	if url, _ := StealArtistImage(a.URL); url != "" {
-		a.Image =  append(a.Image, ExternalImage{URL: url, Size: "600"});
+		a.Image = append(a.Image, ExternalImage{URL: url, Size: "600"})
 
 	}
 
@@ -365,4 +362,3 @@ func StealArtistImage(artistURL string) (string, error) {
 
 	return imageURL, nil
 }
-

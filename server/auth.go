@@ -7,8 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
- 	"net/http"  
-	"time"              
+	"net/http"
+	"time"
 
 	"github.com/deluan/rest"
 	"github.com/go-chi/jwtauth/v5"

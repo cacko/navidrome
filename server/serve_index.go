@@ -2,9 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
-	"fmt"
 	"io/fs"
 	"net/http"
 	"path"
@@ -168,8 +168,7 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 
 	data["ShareDuration"] = fmt.Sprintf("%.f", duration)
 
-
-	if len(sd.Tracks) > 1{
+	if len(sd.Tracks) > 1 {
 		data["ShareType"] = "music:album"
 		data["ShareTitle"] = data["ShareAlbum"]
 		data["ShareDescription"] = fmt.Sprintf("album by %s", data["ShareArtist"])

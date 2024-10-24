@@ -310,19 +310,13 @@ func (e *externalMetadata) ArtistImage(ctx context.Context, id string) (*url.URL
 		return nil, err
 	}
 
-
-
 	e.callGetImage(ctx, e.ag, artist)
 	if utils.IsCtxDone(ctx) {
 		log.Warn(ctx, "ArtistImage call canceled", ctx.Err())
 		return nil, ctx.Err()
 	}
 
-	
-
 	imageUrl := artist.ArtistImageUrl()
-
-
 
 	if imageUrl == "" {
 		return nil, agents.ErrNotFound

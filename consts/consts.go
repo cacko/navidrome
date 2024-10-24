@@ -111,7 +111,6 @@ var (
 			TargetFormat:   "aac",
 			DefaultBitRate: 256,
 			Command:        "ffmpeg -i %s -map 0:a -c:a aac -b:a %bk -ac 2 -ar 48000 -f adts -",
-
 		},
 	}
 
