@@ -1,9 +1,10 @@
 package taglib
 
 /*
-#cgo pkg-config: taglib
+#cgo pkg-config: --define-prefix taglib
 #cgo illumos LDFLAGS: -lstdc++ -lsendfile
 #cgo linux darwin CXXFLAGS: -std=c++11
+#cgo darwin LDFLAGS: -L/opt/homebrew/opt/taglib/lib
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

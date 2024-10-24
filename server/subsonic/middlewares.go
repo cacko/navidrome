@@ -1,6 +1,7 @@
 package subsonic
 
 import (
+	"cmp"
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
@@ -20,7 +21,6 @@ import (
 	"github.com/navidrome/navidrome/model/request"
 	"github.com/navidrome/navidrome/server"
 	"github.com/navidrome/navidrome/server/subsonic/responses"
-	. "github.com/navidrome/navidrome/utils/gg"
 	"github.com/navidrome/navidrome/utils/req"
 )
 
@@ -119,14 +119,6 @@ func authenticate(ds model.DataStore) func(next http.Handler) http.Handler {
 				return
 			}
 
-			// TODO: Find a way to update LastAccessAt without causing too much retention in the DB
-			//go func() {
-			//	err := ds.User(ctx).UpdateLastAccessAt(usr.ID)
-			//	if err != nil {
-			//		log.Error(ctx, "Could not update user's lastAccessAt", "user", usr.UserName)
-			//	}
-			//}()
-
 			ctx = request.WithUser(ctx, *usr)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -183,7 +175,7 @@ func getPlayer(players core.Players) func(next http.Handler) http.Handler {
 					MaxAge:   consts.CookieExpiry,
 					HttpOnly: true,
 					SameSite: http.SameSiteStrictMode,
-					Path:     If(conf.Server.BasePath, "/"),
+					Path:     cmp.Or(conf.Server.BasePath, "/"),
 				}
 				http.SetCookie(w, cookie)
 			}

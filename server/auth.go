@@ -7,9 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"strings"
-	"net/http"
-	"time"
+ 	"net/http"  
+	"time"              
 
 	"github.com/deluan/rest"
 	"github.com/go-chi/jwtauth/v5"
@@ -194,7 +193,7 @@ func UsernameFromToken(r *http.Request) string {
 }
 
 func UsernameFromReverseProxyHeader(r *http.Request) string {
-	if conf.Server.ReverseProxyWhitelist == "" && !strings.HasPrefix(conf.Server.Address, "unix:") {
+	if conf.Server.ReverseProxyWhitelist == "" {
 		return ""
 	}
 	reverseProxyIp, ok := request.ReverseProxyIpFrom(r.Context())

@@ -35,7 +35,7 @@ type Subsonic struct {
 	Genres        *Genres            `xml:"genres,omitempty"                              json:"genres,omitempty"`
 
 	// ID3
-	Artist              *Indexes             `xml:"artists,omitempty"                     json:"artists,omitempty"`
+	Artist              *Artists             `xml:"artists,omitempty"                     json:"artists,omitempty"`
 	ArtistWithAlbumsID3 *ArtistWithAlbumsID3 `xml:"artist,omitempty"                      json:"artist,omitempty"`
 	AlbumWithSongsID3   *AlbumWithSongsID3   `xml:"album,omitempty"                       json:"album,omitempty"`
 
@@ -112,6 +112,17 @@ type Indexes struct {
 	IgnoredArticles string  `xml:"ignoredArticles,attr"   json:"ignoredArticles"`
 }
 
+type IndexID3 struct {
+	Name    string      `xml:"name,attr"                     json:"name"`
+	Artists []ArtistID3 `xml:"artist"                        json:"artist"`
+}
+
+type Artists struct {
+	Index           []IndexID3 `xml:"index"                  json:"index,omitempty"`
+	LastModified    int64      `xml:"lastModified,attr"      json:"lastModified"`
+	IgnoredArticles string     `xml:"ignoredArticles,attr"   json:"ignoredArticles"`
+}
+
 type MediaType string
 
 const (
@@ -164,6 +175,7 @@ type Child struct {
 	Genres        ItemGenres `xml:"genres"                  json:"genres"`
 	ReplayGain    ReplayGain `xml:"replayGain"              json:"replayGain"`
 	ChannelCount  int32      `xml:"channelCount,attr"       json:"channelCount"`
+	SamplingRate  int32      `xml:"samplingRate,attr"       json:"samplingRate"`
 }
 
 type Songs struct {
@@ -206,8 +218,8 @@ type ArtistID3 struct {
 	ArtistImageUrl string     `xml:"artistImageUrl,attr,omitempty"      json:"artistImageUrl,omitempty"`
 
 	// OpenSubsonic extensions
-	MusicBrainzId string `xml:"musicBrainzId,attr,omitempty"       json:"musicBrainzId,omitempty"`
-	SortName      string `xml:"sortName,attr,omitempty"            json:"sortName,omitempty"`
+	MusicBrainzId string `xml:"musicBrainzId,attr" json:"musicBrainzId"`
+	SortName      string `xml:"sortName,attr"      json:"sortName"`
 }
 
 type AlbumID3 struct {
@@ -457,7 +469,7 @@ type JukeboxPlaylist struct {
 
 type Line struct {
 	Start *int64 `xml:"start,attr,omitempty" json:"start,omitempty"`
-	Value string `xml:"value"                json:"value"`
+	Value string `xml:",chardata"            json:"value"`
 }
 
 type StructuredLyric struct {
@@ -502,7 +514,7 @@ type ReplayGain struct {
 }
 
 type DiscTitle struct {
-	Disc  int    `xml:"disc,attr" json:"disc"`
+	Disc  int32  `xml:"disc,attr" json:"disc"`
 	Title string `xml:"title,attr" json:"title"`
 }
 
@@ -523,7 +535,7 @@ func marshalJSONArray[T any](v []T) ([]byte, error) {
 }
 
 type ItemDate struct {
-	Year  int `xml:"year,attr,omitempty" json:"year,omitempty"`
-	Month int `xml:"month,attr,omitempty" json:"month,omitempty"`
-	Day   int `xml:"day,attr,omitempty" json:"day,omitempty"`
+	Year  int32 `xml:"year,attr,omitempty" json:"year,omitempty"`
+	Month int32 `xml:"month,attr,omitempty" json:"month,omitempty"`
+	Day   int32 `xml:"day,attr,omitempty" json:"day,omitempty"`
 }

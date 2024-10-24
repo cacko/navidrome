@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -23,7 +24,6 @@ import (
 	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/server/events"
 	"github.com/navidrome/navidrome/ui"
-	. "github.com/navidrome/navidrome/utils/gg"
 )
 
 type Server struct {
@@ -40,7 +40,7 @@ func New(ds model.DataStore, broker events.Broker) *Server {
 	s.initRoutes()
 	s.mountAuthenticationRoutes()
 	s.mountRootRedirector()
-	checkFfmpegInstallation()
+	checkFFmpegInstallation()
 	checkExternalCredentials()
 	return s
 }
@@ -237,7 +237,7 @@ func AbsoluteURL(r *http.Request, u string, params url.Values) string {
 	if strings.HasPrefix(u, "/") {
 		buildUrl.Path = path.Join(conf.Server.BasePath, buildUrl.Path)
 		if conf.Server.BaseHost != "" {
-			buildUrl.Scheme = If(conf.Server.BaseScheme, "http")
+			buildUrl.Scheme = cmp.Or(conf.Server.BaseScheme, "http")
 			buildUrl.Host = conf.Server.BaseHost
 		} else {
 			buildUrl.Scheme = r.URL.Scheme

@@ -3,13 +3,21 @@ NODE_VERSION=$(shell cat .nvmrc)
 
 ifneq ("$(wildcard .git/HEAD)","")
 GIT_SHA=$(shell git rev-parse --short HEAD)
-GIT_TAG=$(shell git describe --tags `git rev-list --tags --max-count=1`)
+GIT_TAG=$(shell git describe --tags `git rev-list --tags --max-count=1`)-SNAPSHOT
 else
 GIT_SHA=source_archive
-GIT_TAG=$(patsubst navidrome-%,v%,$(notdir $(PWD)))
+GIT_TAG=$(patsubst navidrome-%,v%,$(notdir $(PWD)))-SNAPSHOT
 endif
 
-CI_RELEASER_VERSION=1.22.2-1 ## https://github.com/navidrome/ci-goreleaser
+SUPPORTED_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v5,linux/arm/v6,linux/arm/v7,linux/386,darwin/amd64,darwin/arm64,windows/amd64,windows/386
+IMAGE_PLATFORMS ?= $(shell echo $(SUPPORTED_PLATFORMS) | tr ',' '\n' | grep "linux" | grep -v "arm/v5" | tr '\n' ',' | sed 's/,$$//')
+PLATFORMS ?= $(SUPPORTED_PLATFORMS)
+DOCKER_TAG ?= deluan/navidrome:develop
+
+# Taglib version to use in cross-compilation, from https://github.com/navidrome/cross-taglib
+CROSS_TAGLIB_VERSION ?= 2.0.2-1
+
+UI_SRC_FILES := $(shell find ui -type f -not -path "ui/build/*" -not -path "ui/node_modules/*")
 
 setup: check_env download-deps setup-git ##@1_Run_First Install dependencies and prepare development environment
 	@echo Downloading Node dependencies...
@@ -20,7 +28,7 @@ dev: check_env   ##@Development Start Navidrome in development mode, with hot-re
 	npx foreman -j Procfile.dev -p 4533 start
 .PHONY: dev
 
-server: check_go_env  ##@Development Start the backend in development mode
+server: check_go_env buildjs ##@Development Start the backend in development mode
 	@go run github.com/cespare/reflex@latest -d none -c reflex.conf
 .PHONY: server
 
@@ -33,7 +41,7 @@ test: ##@Development Run Go tests
 .PHONY: test
 
 testall: test ##@Development Run Go and JS tests
-	@(cd ./ui && npm test -- --watchAll=false)
+	@(cd ./ui && npm run test:ci)
 .PHONY: testall
 
 lint: ##@Development Lint Go code
@@ -61,12 +69,12 @@ snapshots: ##@Development Update (GoLang) Snapshot tests
 
 migration-sql: ##@Development Create an empty SQL migration file
 	@if [ -z "${name}" ]; then echo "Usage: make migration-sql name=name_of_migration_file"; exit 1; fi
-	go run github.com/pressly/goose/v3/cmd/goose@latest -dir db/migration create ${name} sql
+	go run github.com/pressly/goose/v3/cmd/goose@latest -dir db/migrations create ${name} sql
 .PHONY: migration
 
 migration-go: ##@Development Create an empty Go migration file
 	@if [ -z "${name}" ]; then echo "Usage: make migration-go name=name_of_migration_file"; exit 1; fi
-	go run github.com/pressly/goose/v3/cmd/goose@latest -dir db/migration create ${name}
+	go run github.com/pressly/goose/v3/cmd/goose@latest -dir db/migrations create ${name}
 .PHONY: migration
 
 setup-dev: setup
@@ -78,48 +86,63 @@ setup-git: ##@Development Setup Git hooks (pre-commit and pre-push)
 	@(cd .git/hooks && ln -sf ../../git/* .)
 .PHONY: setup-git
 
-buildall: buildjs build ##@Build Build the project, both frontend and backend
-.PHONY: buildall
-
-build: warning-noui-build check_go_env  ##@Build Build only backend
-	go build -ldflags="-X github.com/navidrome/navidrome/consts.gitSha=$(GIT_SHA) -X github.com/navidrome/navidrome/consts.gitTag=$(GIT_TAG)-SNAPSHOT" -tags=netgo
+build: check_go_env buildjs ##@Build Build the project
+	go build -ldflags="-X github.com/navidrome/navidrome/consts.gitSha=$(GIT_SHA) -X github.com/navidrome/navidrome/consts.gitTag=$(GIT_TAG)" -tags=netgo
 .PHONY: build
 
-debug-build: warning-noui-build check_go_env  ##@Build Build only backend (with remote debug on)
-	go build -gcflags="all=-N -l" -ldflags="-X github.com/navidrome/navidrome/consts.gitSha=$(GIT_SHA) -X github.com/navidrome/navidrome/consts.gitTag=$(GIT_TAG)-SNAPSHOT" -tags=netgo
+buildall: deprecated build
+.PHONY: buildall
+
+debug-build: check_go_env buildjs ##@Build Build the project (with remote debug on)
+	go build -gcflags="all=-N -l" -ldflags="-X github.com/navidrome/navidrome/consts.gitSha=$(GIT_SHA) -X github.com/navidrome/navidrome/consts.gitTag=$(GIT_TAG)" -tags=netgo
 .PHONY: debug-build
 
-buildjs: check_node_env ##@Build Build only frontend
-	@(cd ./ui && npm run build)
+buildjs: check_node_env ui/build/index.html ##@Build Build only frontend
 .PHONY: buildjs
 
-all: warning-noui-build ##@Cross_Compilation Build binaries for all supported platforms. It does not build the frontend
-	@echo "Building binaries for all platforms using builder ${CI_RELEASER_VERSION}"
-	docker run -t -v $(PWD):/workspace -w /workspace deluan/ci-goreleaser:$(CI_RELEASER_VERSION) \
- 		goreleaser release --clean --skip=publish --snapshot
-.PHONY: all
+docker-buildjs: ##@Build Build only frontend using Docker
+	docker build --output "./ui" --target ui-bundle .
+.PHONY: docker-buildjs
 
-single: warning-noui-build ##@Cross_Compilation Build binaries for a single supported platforms. It does not build the frontend
-	@if [ -z "${GOOS}" -o -z "${GOARCH}" ]; then \
-		echo "Usage: GOOS=<os> GOARCH=<arch> make single"; \
-		echo "Options:"; \
-		grep -- "- id: navidrome_" .goreleaser.yml | sed 's/- id: navidrome_//g'; \
-		exit 1; \
-	fi
-	@echo "Building binaries for ${GOOS}/${GOARCH} using builder ${CI_RELEASER_VERSION}"
-	docker run -t -v $(PWD):/workspace -e GOOS -e GOARCH -w /workspace deluan/ci-goreleaser:$(CI_RELEASER_VERSION) \
- 		goreleaser build --clean --snapshot -p 2 --single-target --id navidrome_${GOOS}_${GOARCH}
-.PHONY: single
+ui/build/index.html: $(UI_SRC_FILES)
+	@(cd ./ui && npm run build)
 
-docker: buildjs ##@Build Build Docker linux/amd64 image (tagged as `deluan/navidrome:develop`)
-	GOOS=linux GOARCH=amd64 make single
-	@echo "Building Docker image"
-	docker build . --platform linux/amd64 -t deluan/navidrome:develop -f .github/workflows/pipeline.dockerfile
-.PHONY: docker
+docker-platforms: ##@Cross_Compilation List supported platforms
+	@echo "Supported platforms:"
+	@echo "$(SUPPORTED_PLATFORMS)" | tr ',' '\n' | sort | sed 's/^/    /'
+	@echo "\nUsage: make PLATFORMS=\"linux/amd64\" docker-build"
+	@echo "       make IMAGE_PLATFORMS=\"linux/amd64\" docker-image"
+.PHONY: docker-platforms
 
-warning-noui-build:
-	@echo "WARNING: This command does not build the frontend, it uses the latest built with 'make buildjs'"
-.PHONY: warning-noui-build
+docker-build: ##@Cross_Compilation Cross-compile for any supported platform (check `make docker-platforms`)
+	docker buildx build \
+		--platform $(PLATFORMS) \
+		--build-arg GIT_TAG=${GIT_TAG} \
+		--build-arg GIT_SHA=${GIT_SHA} \
+		--build-arg CROSS_TAGLIB_VERSION=${CROSS_TAGLIB_VERSION} \
+		--output "./binaries" --target binary .
+.PHONY: docker-build
+
+docker-image: ##@Cross_Compilation Build Docker image, tagged as `deluan/navidrome:develop`, override with DOCKER_TAG var. Use IMAGE_PLATFORMS to specify target platforms
+	@echo $(IMAGE_PLATFORMS) | grep -q "windows" && echo "ERROR: Windows is not supported for Docker builds" && exit 1 || true
+	@echo $(IMAGE_PLATFORMS) | grep -q "darwin" && echo "ERROR: macOS is not supported for Docker builds" && exit 1 || true
+	@echo $(IMAGE_PLATFORMS) | grep -q "arm/v5" && echo "ERROR: Linux ARMv5 is not supported for Docker builds" && exit 1 || true
+	docker buildx build \
+		--platform $(IMAGE_PLATFORMS) \
+		--build-arg GIT_TAG=${GIT_TAG} \
+		--build-arg GIT_SHA=${GIT_SHA} \
+		--build-arg CROSS_TAGLIB_VERSION=${CROSS_TAGLIB_VERSION} \
+		--tag $(DOCKER_TAG) .
+.PHONY: docker-image
+
+docker-msi: ##@Cross_Compilation Build MSI installer for Windows
+	make docker-build PLATFORMS=windows/386,windows/amd64
+	DOCKER_CLI_HINTS=false docker build -q -t navidrome-msi-builder -f release/wix/msitools.dockerfile .
+	@rm -rf binaries/msi
+	docker run -it --rm -v $(PWD):/workspace -v $(PWD)/binaries:/workspace/binaries -e GIT_TAG=${GIT_TAG} \
+		navidrome-msi-builder sh -c "release/wix/build_msi.sh /workspace 386 && release/wix/build_msi.sh /workspace amd64"
+	@du -h binaries/msi/*.msi
+.PHONY: docker-msi
 
 get-music: ##@Development Download some free music from Navidrome's demo instance
 	mkdir -p music
@@ -135,6 +158,11 @@ get-music: ##@Development Download some free music from Navidrome's demo instanc
 
 ##########################################
 #### Miscellaneous
+
+clean:
+	@rm -rf ./binaries ./dist ./ui/build/*
+	@touch ./ui/build/.gitkeep
+.PHONY: clean
 
 release:
 	@if [[ ! "${V}" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$$ ]]; then echo "Usage: make release V=X.X.X"; exit 1; fi
@@ -174,6 +202,10 @@ check_node_env:
 
 pre-push: lintall testall
 .PHONY: pre-push
+
+deprecated:
+	@echo "WARNING: This target is deprecated and will be removed in future releases. Use 'make build' instead."
+.PHONY: deprecated
 
 .DEFAULT_GOAL := help
 
