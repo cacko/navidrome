@@ -18,18 +18,19 @@ tasks:
   build:
     desc: build da shiut
     cmds:
-      - task: pull
       - make setup
       - make build
   start:
     cmds:
-      - ssh $REMOTE_HOST 'source ~/.zshrc;systemctl --user start {{.PROJECT}}
+      - ssh $REMOTE_HOST 'source ~/.zshrc;systemctl --user start {{.PROJECT}}'
   stop:
     cmds:
-      - ssh $REMOTE_HOST 'source ~/.zshrc;systemctl --user stop {{.PROJECT}}
+      - ssh $REMOTE_HOST 'source ~/.zshrc;systemctl --user stop {{.PROJECT}}'
   deploy:
     desc: deploy
     cmds:
+      - task: push
+      - task: pp
       - task: stop
       - ssh $REMOTE_HOST 'source ~/.zshrc;cd ~/src/{{.PROJECT}};task build;cp navidrome /store/navidrome/bin'
       - task: start
