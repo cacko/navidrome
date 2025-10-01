@@ -16,6 +16,14 @@ func userName(ctx context.Context) string {
 	}
 }
 
+func clientName(ctx context.Context) string {
+	if client, ok := request.ClientFrom(ctx); ok {
+		return client
+	}
+
+	return "UNKNOWN"
+}
+
 // BFR We should only access files through the `storage.Storage` interface. This will require changing how
 // TagLib and ffmpeg access files
 var AbsolutePath = func(ctx context.Context, ds model.DataStore, libId int, path string) string {

@@ -381,9 +381,6 @@ func init() {
 	})
 }
 
-//nolint:gochecknoglobals
-var artistOpenGraphQuery = cascadia.MustCompile(`html > head > meta[property="og:image"]`)
-
 func StealArtistImage(artistURL string) (string, error) {
 	resp, err := http.Get(artistURL) //nolint:gosec
 	if err != nil {
