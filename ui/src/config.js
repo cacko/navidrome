@@ -12,7 +12,7 @@ const defaultConfig = {
   enableTranscodingConfig: true,
   enableDownloads: true,
   enableFavourites: true,
-  losslessFormats: 'FLAC,WAV,ALAC,DSF',
+  losslessFormats: 'FLAC,WAV,ALAC,DSF,WV',
   welcomeMessage: '',
   gaTrackingId: '',
   devActivityPanel: true,

@@ -105,6 +105,8 @@ const streamUrl = (id, options) => {
   return baseUrl(
     url('stream', id, {
       ts: true,
+      format: "opus",
+      maxBitRate: 96,
       ...options,
     }),
   )

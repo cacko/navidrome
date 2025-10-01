@@ -49,10 +49,10 @@ export default defineConfig({
 // PWA manifest
 function manifest() {
   return {
-    name: 'Navidrome',
-    short_name: 'Navidrome',
+    name: 'Music',
+    short_name: 'mucac',
     description:
-      'Navidrome, an open source web-based music collection server and streamer',
+      'a good idea is a good idea forever',
     categories: ['music', 'entertainment'],
     display: 'standalone',
     start_url: './',

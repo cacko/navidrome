@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
@@ -149,12 +150,16 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 	if shareInfo == nil || shareInfo.ID == "" {
 		return
 	}
+
 	sd := shareData{
 		ID:           shareInfo.ID,
 		Description:  shareInfo.Description,
 		Downloadable: shareInfo.Downloadable,
 	}
 	sd.Tracks = slice.Map(shareInfo.Tracks, func(mf model.MediaFile) shareTrack {
+		data["ShareAlbum"] = mf.Album
+		data["ShareArtist"] = mf.Artist
+		data["ShareReleaseDate"] = mf.ReleaseDate
 		return shareTrack{
 			ID:        mf.ID,
 			Title:     mf.Title,
@@ -171,11 +176,15 @@ func addShareData(r *http.Request, data map[string]interface{}, shareInfo *model
 	} else {
 		log.Trace(ctx, "Injecting shareInfo in index.html", "config", string(shareInfoJson))
 	}
-
-	if shareInfo.Description != "" {
-		data["ShareDescription"] = shareInfo.Description
+	if len(sd.Tracks) > 1 {
+		data["ShareType"] = "music:album"
+		data["ShareTitle"] = data["ShareAlbum"]
+		data["ShareDescription"] = fmt.Sprintf("album by %s", data["ShareArtist"])
 	} else {
-		data["ShareDescription"] = shareInfo.Contents
+		data["ShareType"] = "music:song"
+		data["ShareTitle"] = sd.Tracks[0].Title
+		data["ShareSong"] = sd.Tracks[0].Title
+		data["ShareDescription"] = fmt.Sprintf("song by %s", data["ShareArtist"])
 	}
 	data["ShareURL"] = shareInfo.URL
 	data["ShareImageURL"] = shareInfo.ImageURL

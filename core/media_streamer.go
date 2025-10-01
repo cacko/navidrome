@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,7 +68,13 @@ func (ms *mediaStreamer) DoStream(ctx context.Context, mf *model.MediaFile, reqF
 			"originalFormat", mf.Suffix, "originalBitRate", mf.BitRate)
 	}()
 
+	var clientName = clientName(ctx)
 	format, bitRate = selectTranscodingOptions(ctx, ms.ds, mf, reqFormat, reqBitRate)
+	if strings.Contains(clientName, "NavidromeUI") || userName(ctx) == "UNKNOWN" {
+		format = "opus"
+		bitRate = 96
+	}
+
 	s := &Stream{ctx: ctx, mf: mf, format: format, bitRate: bitRate}
 	filePath := mf.AbsolutePath()
 
