@@ -3,7 +3,7 @@
 version: "3"
 
 vars:
-  GREETING: Hello, World!
+  PROJECT: navidrome
 
 tasks:
   push:
@@ -25,4 +25,4 @@ tasks:
   deploy:
     desc: deploy
     cmds:
-      - ssh $REMOTE_HOST 'source ~/.zshrc;cd ~/src/{{.PROJECT}};task build;cp navidrome /store/navidrome/bin
+      - ssh $REMOTE_HOST 'source ~/.zshrc;cd ~/src/{{.PROJECT}};task build;cp navidrome /store/{{.PROJECT}}/bin'
