@@ -10,10 +10,12 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
       manifest: manifest(),
-      workbox: {
-        // Workbox options
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
+      devOptions: {
+        enabled: true,
       },
     }),
   ],

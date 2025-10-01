@@ -22,9 +22,18 @@ type CacheWarmer interface {
 	PreCache(artID model.ArtworkID)
 }
 
+// NewCacheWarmer creates a new CacheWarmer instance. The CacheWarmer will pre-cache Artwork images in the background
+// to speed up the response time when the image is requested by the UI. The cache is pre-populated with the original
+// image size, as well as the size defined in the UICoverArtSize constant.
 func NewCacheWarmer(artwork Artwork, cache cache.FileCache) CacheWarmer {
 	// If image cache is disabled, return a NOOP implementation
 	if conf.Server.ImageCacheSize == "0" || !conf.Server.EnableArtworkPrecache {
+		return &noopCacheWarmer{}
+	}
+
+	// If the file cache is disabled, return a NOOP implementation
+	if cache.Disabled(context.Background()) {
+		log.Debug("Image cache disabled. Cache warmer will not run")
 		return &noopCacheWarmer{}
 	}
 
@@ -49,13 +58,8 @@ type cacheWarmer struct {
 	wakeSignal chan struct{}
 }
 
-var ignoredIds = map[string]struct{}{
-	consts.VariousArtistsID: {},
-	consts.UnknownArtistID:  {},
-}
-
 func (a *cacheWarmer) PreCache(artID model.ArtworkID) {
-	if _, shouldIgnore := ignoredIds[artID.ID]; shouldIgnore {
+	if a.cache.Disabled(context.Background()) {
 		return
 	}
 	a.mutex.Lock()
@@ -79,10 +83,24 @@ func (a *cacheWarmer) run(ctx context.Context) {
 			break
 		}
 
+		if a.cache.Disabled(ctx) {
+			a.mutex.Lock()
+			pending := len(a.buffer)
+			a.buffer = make(map[model.ArtworkID]struct{})
+			a.mutex.Unlock()
+			if pending > 0 {
+				log.Trace(ctx, "Cache disabled, discarding precache buffer", "bufferLen", pending)
+			}
+			return
+		}
+
 		// If cache not available, keep waiting
 		if !a.cache.Available(ctx) {
-			if len(a.buffer) > 0 {
-				log.Trace(ctx, "Cache not available, buffering precache request", "bufferLen", len(a.buffer))
+			a.mutex.Lock()
+			bufferLen := len(a.buffer)
+			a.mutex.Unlock()
+			if bufferLen > 0 {
+				log.Trace(ctx, "Cache not available, buffering precache request", "bufferLen", bufferLen)
 			}
 			continue
 		}
@@ -104,14 +122,8 @@ func (a *cacheWarmer) run(ctx context.Context) {
 }
 
 func (a *cacheWarmer) waitSignal(ctx context.Context, timeout time.Duration) {
-	var to <-chan time.Time
-	if !a.cache.Available(ctx) {
-		tmr := time.NewTimer(timeout)
-		defer tmr.Stop()
-		to = tmr.C
-	}
 	select {
-	case <-to:
+	case <-time.After(timeout):
 	case <-a.wakeSignal:
 	case <-ctx.Done():
 	}
@@ -130,7 +142,7 @@ func (a *cacheWarmer) doCacheImage(ctx context.Context, id model.ArtworkID) erro
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	r, _, err := a.artwork.Get(ctx, id, consts.UICoverArtSize, false)
+	r, _, err := a.artwork.Get(ctx, id, consts.UICoverArtSize, true)
 	if err != nil {
 		return fmt.Errorf("caching id='%s': %w", id, err)
 	}
@@ -140,6 +152,10 @@ func (a *cacheWarmer) doCacheImage(ctx context.Context, id model.ArtworkID) erro
 		return err
 	}
 	return nil
+}
+
+func NoopCacheWarmer() CacheWarmer {
+	return &noopCacheWarmer{}
 }
 
 type noopCacheWarmer struct{}

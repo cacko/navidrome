@@ -2,11 +2,14 @@ package persistence
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
+	"time"
 
 	"github.com/navidrome/navidrome/db"
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
+	"github.com/navidrome/navidrome/utils/run"
 	"github.com/pocketbase/dbx"
 )
 
@@ -14,8 +17,8 @@ type SQLStore struct {
 	db dbx.Builder
 }
 
-func New(d db.DB) model.DataStore {
-	return &SQLStore{db: NewDBXBuilder(d)}
+func New(conn *sql.DB) model.DataStore {
+	return &SQLStore{db: dbx.NewFromDB(conn, db.Driver)}
 }
 
 func (s *SQLStore) Album(ctx context.Context) model.AlbumRepository {
@@ -34,8 +37,16 @@ func (s *SQLStore) Library(ctx context.Context) model.LibraryRepository {
 	return NewLibraryRepository(ctx, s.getDBXBuilder())
 }
 
+func (s *SQLStore) Folder(ctx context.Context) model.FolderRepository {
+	return newFolderRepository(ctx, s.getDBXBuilder())
+}
+
 func (s *SQLStore) Genre(ctx context.Context) model.GenreRepository {
 	return NewGenreRepository(ctx, s.getDBXBuilder())
+}
+
+func (s *SQLStore) Tag(ctx context.Context) model.TagRepository {
+	return NewTagRepository(ctx, s.getDBXBuilder())
 }
 
 func (s *SQLStore) PlayQueue(ctx context.Context) model.PlayQueueRepository {
@@ -100,82 +111,83 @@ func (s *SQLStore) Resource(ctx context.Context, m interface{}) model.ResourceRe
 		return s.Radio(ctx).(model.ResourceRepository)
 	case model.Share:
 		return s.Share(ctx).(model.ResourceRepository)
+	case model.Tag:
+		return s.Tag(ctx).(model.ResourceRepository)
 	}
 	log.Error("Resource not implemented", "model", reflect.TypeOf(m).Name())
 	return nil
 }
 
-type transactional interface {
-	Transactional(f func(*dbx.Tx) error) (err error)
-}
-
-func (s *SQLStore) WithTx(block func(tx model.DataStore) error) error {
-	// If we are already in a transaction, just pass it down
-	if conn, ok := s.db.(*dbx.Tx); ok {
-		return block(&SQLStore{db: conn})
+func (s *SQLStore) WithTx(block func(tx model.DataStore) error, scope ...string) error {
+	var msg string
+	if len(scope) > 0 {
+		msg = scope[0]
 	}
-
-	return s.db.(transactional).Transactional(func(tx *dbx.Tx) error {
-		return block(&SQLStore{db: tx})
+	start := time.Now()
+	conn, inTx := s.db.(*dbx.DB)
+	if !inTx {
+		log.Trace("Nested Transaction started", "scope", msg)
+		conn = dbx.NewFromDB(db.Db(), db.Driver)
+	} else {
+		log.Trace("Transaction started", "scope", msg)
+	}
+	return conn.Transactional(func(tx *dbx.Tx) error {
+		newDb := &SQLStore{db: tx}
+		err := block(newDb)
+		if !inTx {
+			log.Trace("Nested Transaction finished", "scope", msg, "elapsed", time.Since(start), err)
+		} else {
+			log.Trace("Transaction finished", "scope", msg, "elapsed", time.Since(start), err)
+		}
+		return err
 	})
 }
 
-func (s *SQLStore) GC(ctx context.Context, rootFolder string) error {
-	err := s.MediaFile(ctx).(*mediaFileRepository).deleteNotInPath(rootFolder)
-	if err != nil {
-		log.Error(ctx, "Error removing dangling tracks", err)
-		return err
+func (s *SQLStore) WithTxImmediate(block func(tx model.DataStore) error, scope ...string) error {
+	ctx := context.Background()
+	return s.WithTx(func(tx model.DataStore) error {
+		// Workaround to force the transaction to be upgraded to immediate mode to avoid deadlocks
+		// See https://berthub.eu/articles/posts/a-brief-post-on-sqlite3-database-locked-despite-timeout/
+		_ = tx.Property(ctx).Put("tmp_lock_flag", "")
+		defer func() {
+			_ = tx.Property(ctx).Delete("tmp_lock_flag")
+		}()
+
+		return block(tx)
+	}, scope...)
+}
+
+func (s *SQLStore) GC(ctx context.Context) error {
+	trace := func(ctx context.Context, msg string, f func() error) func() error {
+		return func() error {
+			start := time.Now()
+			err := f()
+			log.Debug(ctx, "GC: "+msg, "elapsed", time.Since(start), err)
+			return err
+		}
 	}
-	err = s.MediaFile(ctx).(*mediaFileRepository).removeNonAlbumArtistIds()
+
+	err := run.Sequentially(
+		trace(ctx, "purge empty albums", func() error { return s.Album(ctx).(*albumRepository).purgeEmpty() }),
+		trace(ctx, "purge empty artists", func() error { return s.Artist(ctx).(*artistRepository).purgeEmpty() }),
+		trace(ctx, "mark missing artists", func() error { return s.Artist(ctx).(*artistRepository).markMissing() }),
+		trace(ctx, "purge empty folders", func() error { return s.Folder(ctx).(*folderRepository).purgeEmpty() }),
+		trace(ctx, "clean album annotations", func() error { return s.Album(ctx).(*albumRepository).cleanAnnotations() }),
+		trace(ctx, "clean artist annotations", func() error { return s.Artist(ctx).(*artistRepository).cleanAnnotations() }),
+		trace(ctx, "clean media file annotations", func() error { return s.MediaFile(ctx).(*mediaFileRepository).cleanAnnotations() }),
+		trace(ctx, "clean media file bookmarks", func() error { return s.MediaFile(ctx).(*mediaFileRepository).cleanBookmarks() }),
+		trace(ctx, "purge non used tags", func() error { return s.Tag(ctx).(*tagRepository).purgeUnused() }),
+		trace(ctx, "remove orphan playlist tracks", func() error { return s.Playlist(ctx).(*playlistRepository).removeOrphans() }),
+	)
 	if err != nil {
-		log.Error(ctx, "Error removing non-album artist_ids", err)
-		return err
-	}
-	err = s.Album(ctx).(*albumRepository).purgeEmpty()
-	if err != nil {
-		log.Error(ctx, "Error removing empty albums", err)
-		return err
-	}
-	err = s.Artist(ctx).(*artistRepository).purgeEmpty()
-	if err != nil {
-		log.Error(ctx, "Error removing empty artists", err)
-		return err
-	}
-	err = s.MediaFile(ctx).(*mediaFileRepository).cleanAnnotations()
-	if err != nil {
-		log.Error(ctx, "Error removing orphan mediafile annotations", err)
-		return err
-	}
-	err = s.Album(ctx).(*albumRepository).cleanAnnotations()
-	if err != nil {
-		log.Error(ctx, "Error removing orphan album annotations", err)
-		return err
-	}
-	err = s.Artist(ctx).(*artistRepository).cleanAnnotations()
-	if err != nil {
-		log.Error(ctx, "Error removing orphan artist annotations", err)
-		return err
-	}
-	err = s.MediaFile(ctx).(*mediaFileRepository).cleanBookmarks()
-	if err != nil {
-		log.Error(ctx, "Error removing orphan bookmarks", err)
-		return err
-	}
-	err = s.Playlist(ctx).(*playlistRepository).removeOrphans()
-	if err != nil {
-		log.Error(ctx, "Error tidying up playlists", err)
-	}
-	err = s.Genre(ctx).(*genreRepository).purgeEmpty()
-	if err != nil {
-		log.Error(ctx, "Error removing unused genres", err)
-		return err
+		log.Error(ctx, "Error tidying up database", err)
 	}
 	return err
 }
 
 func (s *SQLStore) getDBXBuilder() dbx.Builder {
 	if s.db == nil {
-		return NewDBXBuilder(db.Db())
+		return dbx.NewFromDB(db.Db(), db.Driver)
 	}
 	return s.db
 }

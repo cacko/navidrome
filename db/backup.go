@@ -32,23 +32,23 @@ func backupPath(t time.Time) string {
 	)
 }
 
-func (d *db) backupOrRestore(ctx context.Context, isBackup bool, path string) error {
+func backupOrRestore(ctx context.Context, isBackup bool, path string) error {
 	// heavily inspired by https://codingrabbits.dev/posts/go_and_sqlite_backup_and_maybe_restore/
-	backupDb, err := sql.Open(Driver, path)
+	existingConn, err := Db().Conn(ctx)
 	if err != nil {
-		return err
-	}
-	defer backupDb.Close()
-
-	existingConn, err := d.writeDB.Conn(ctx)
-	if err != nil {
-		return err
+		return fmt.Errorf("getting existing connection: %w", err)
 	}
 	defer existingConn.Close()
 
+	backupDb, err := sql.Open(Driver, path)
+	if err != nil {
+		return fmt.Errorf("opening backup database in '%s': %w", path, err)
+	}
+	defer backupDb.Close()
+
 	backupConn, err := backupDb.Conn(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("getting backup connection: %w", err)
 	}
 	defer backupConn.Close()
 
@@ -100,7 +100,23 @@ func (d *db) backupOrRestore(ctx context.Context, isBackup bool, path string) er
 	return err
 }
 
-func prune(ctx context.Context) (int, error) {
+func Backup(ctx context.Context) (string, error) {
+	destPath := backupPath(time.Now())
+	log.Debug(ctx, "Creating backup", "path", destPath)
+	err := backupOrRestore(ctx, true, destPath)
+	if err != nil {
+		return "", err
+	}
+
+	return destPath, nil
+}
+
+func Restore(ctx context.Context, path string) error {
+	log.Debug(ctx, "Restoring backup", "path", path)
+	return backupOrRestore(ctx, false, path)
+}
+
+func Prune(ctx context.Context) (int, error) {
 	files, err := os.ReadDir(conf.Server.Backup.Path)
 	if err != nil {
 		return 0, fmt.Errorf("unable to read database backup entries: %w", err)

@@ -9,15 +9,16 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
+	_ "github.com/navidrome/navidrome/adapters/taglib"
 	"github.com/navidrome/navidrome/conf"
 	"github.com/navidrome/navidrome/consts"
-	"github.com/navidrome/navidrome/core"
 	"github.com/navidrome/navidrome/db"
 	"github.com/navidrome/navidrome/log"
+	"github.com/navidrome/navidrome/model"
 	"github.com/navidrome/navidrome/resources"
+	"github.com/navidrome/navidrome/scanner"
 	"github.com/navidrome/navidrome/scheduler"
 	"github.com/navidrome/navidrome/server/backgrounds"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
@@ -47,8 +48,11 @@ Complete documentation is available at https://www.navidrome.org/docs`,
 
 // Execute runs the root cobra command, which will start the Navidrome server by calling the runNavidrome function.
 func Execute() {
+	ctx, cancel := mainContext(context.Background())
+	defer cancel()
+
 	rootCmd.SetVersionTemplate(`{{println .Version}}`)
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -57,7 +61,7 @@ func preRun() {
 	if !noBanner {
 		println(resources.Banner())
 	}
-	conf.Load()
+	conf.Load(noBanner)
 }
 
 func postRun() {
@@ -68,18 +72,24 @@ func postRun() {
 // If any of the services returns an error, it will log it and exit. If the process receives a signal to exit,
 // it will cancel the context and exit gracefully.
 func runNavidrome(ctx context.Context) {
-	defer db.Init()()
-
-	ctx, cancel := mainContext(ctx)
-	defer cancel()
+	defer db.Init(ctx)()
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(startServer(ctx))
 	g.Go(startSignaller(ctx))
 	g.Go(startScheduler(ctx))
 	g.Go(startPlaybackServer(ctx))
-	g.Go(schedulePeriodicScan(ctx))
 	g.Go(schedulePeriodicBackup(ctx))
+	g.Go(startInsightsCollector(ctx))
+	g.Go(scheduleDBOptimizer(ctx))
+	g.Go(startPluginManager(ctx))
+	g.Go(runInitialScan(ctx))
+	if conf.Server.Scanner.Enabled {
+		g.Go(startScanWatcher(ctx))
+		g.Go(schedulePeriodicScan(ctx))
+	} else {
+		log.Warn(ctx, "Automatic Scanning is DISABLED")
+	}
 
 	if err := g.Wait(); err != nil {
 		log.Error("Fatal error in Navidrome. Aborting", err)
@@ -99,9 +109,9 @@ func mainContext(ctx context.Context) (context.Context, context.CancelFunc) {
 // startServer starts the Navidrome web server, adding all the necessary routers.
 func startServer(ctx context.Context) func() error {
 	return func() error {
-		a := CreateServer(conf.Server.MusicFolder)
-		a.MountRouter("Native API", consts.URLPathNativeAPI, CreateNativeAPIRouter())
-		a.MountRouter("Subsonic API", consts.URLPathSubsonicAPI, CreateSubsonicAPIRouter())
+		a := CreateServer()
+		a.MountRouter("Native API", consts.URLPathNativeAPI, CreateNativeAPIRouter(ctx))
+		a.MountRouter("Subsonic API", consts.URLPathSubsonicAPI, CreateSubsonicAPIRouter(ctx))
 		a.MountRouter("Public Endpoints", consts.URLPathPublic, CreatePublicRouter())
 		if conf.Server.LastFM.Enabled {
 			a.MountRouter("LastFM Auth", consts.URLPathNativeAPI+"/lastfm", CreateLastFMRouter())
@@ -110,9 +120,10 @@ func startServer(ctx context.Context) func() error {
 			a.MountRouter("ListenBrainz Auth", consts.URLPathNativeAPI+"/listenbrainz", CreateListenBrainzRouter())
 		}
 		if conf.Server.Prometheus.Enabled {
-			// blocking call because takes <1ms but useful if fails
-			core.WriteInitialMetrics()
-			a.MountRouter("Prometheus metrics", conf.Server.Prometheus.MetricsPath, promhttp.Handler())
+			p := CreatePrometheus()
+			// blocking call because takes <100ms but useful if fails
+			p.WriteInitialMetrics(ctx)
+			a.MountRouter("Prometheus metrics", conf.Server.Prometheus.MetricsPath, p.GetHandler())
 		}
 		if conf.Server.DevEnableProfiler {
 			a.MountRouter("Profiling", "/debug", middleware.Profiler())
@@ -127,29 +138,98 @@ func startServer(ctx context.Context) func() error {
 // schedulePeriodicScan schedules a periodic scan of the music library, if configured.
 func schedulePeriodicScan(ctx context.Context) func() error {
 	return func() error {
-		schedule := conf.Server.ScanSchedule
+		schedule := conf.Server.Scanner.Schedule
 		if schedule == "" {
-			log.Warn("Periodic scan is DISABLED")
+			log.Info(ctx, "Periodic scan is DISABLED")
 			return nil
 		}
 
-		scanner := GetScanner()
+		s := CreateScanner(ctx)
 		schedulerInstance := scheduler.GetInstance()
 
 		log.Info("Scheduling periodic scan", "schedule", schedule)
-		err := schedulerInstance.Add(schedule, func() {
-			_ = scanner.RescanAll(ctx, false)
+		_, err := schedulerInstance.Add(schedule, func() {
+			_, err := s.ScanAll(ctx, false)
+			if err != nil {
+				log.Error(ctx, "Error executing periodic scan", err)
+			}
 		})
 		if err != nil {
-			log.Error("Error scheduling periodic scan", err)
+			log.Error(ctx, "Error scheduling periodic scan", err)
 		}
+		return nil
+	}
+}
 
-		time.Sleep(2 * time.Second) // Wait 2 seconds before the initial scan
-		log.Debug("Executing initial scan")
-		if err := scanner.RescanAll(ctx, false); err != nil {
-			log.Error("Error executing initial scan", err)
+func pidHashChanged(ds model.DataStore) (bool, error) {
+	pidAlbum, err := ds.Property(context.Background()).DefaultGet(consts.PIDAlbumKey, "")
+	if err != nil {
+		return false, err
+	}
+	pidTrack, err := ds.Property(context.Background()).DefaultGet(consts.PIDTrackKey, "")
+	if err != nil {
+		return false, err
+	}
+	return !strings.EqualFold(pidAlbum, conf.Server.PID.Album) || !strings.EqualFold(pidTrack, conf.Server.PID.Track), nil
+}
+
+// runInitialScan runs an initial scan of the music library if needed.
+func runInitialScan(ctx context.Context) func() error {
+	return func() error {
+		ds := CreateDataStore()
+		fullScanRequired, err := ds.Property(ctx).DefaultGet(consts.FullScanAfterMigrationFlagKey, "0")
+		if err != nil {
+			return err
 		}
-		log.Debug("Finished initial scan")
+		inProgress, err := ds.Library(ctx).ScanInProgress()
+		if err != nil {
+			return err
+		}
+		pidHasChanged, err := pidHashChanged(ds)
+		if err != nil {
+			return err
+		}
+		scanNeeded := conf.Server.Scanner.ScanOnStartup || inProgress || fullScanRequired == "1" || pidHasChanged
+		time.Sleep(2 * time.Second) // Wait 2 seconds before the initial scan
+		if scanNeeded {
+			s := CreateScanner(ctx)
+			switch {
+			case fullScanRequired == "1":
+				log.Warn(ctx, "Full scan required after migration")
+				_ = ds.Property(ctx).Delete(consts.FullScanAfterMigrationFlagKey)
+			case pidHasChanged:
+				log.Warn(ctx, "PID config changed, performing full scan")
+				fullScanRequired = "1"
+			case inProgress:
+				log.Warn(ctx, "Resuming interrupted scan")
+			default:
+				log.Info("Executing initial scan")
+			}
+
+			_, err = s.ScanAll(ctx, fullScanRequired == "1")
+			if err != nil {
+				log.Error(ctx, "Scan failed", err)
+			} else {
+				log.Info(ctx, "Scan completed")
+			}
+		} else {
+			log.Debug(ctx, "Initial scan not needed")
+		}
+		return nil
+	}
+}
+
+func startScanWatcher(ctx context.Context) func() error {
+	return func() error {
+		if conf.Server.Scanner.WatcherWait == 0 {
+			log.Debug("Folder watcher is DISABLED")
+			return nil
+		}
+		w := CreateScanWatcher(ctx)
+		err := w.Run(ctx)
+		if err != nil {
+			log.Error("Error starting watcher", err)
+		}
 		return nil
 	}
 }
@@ -158,17 +238,16 @@ func schedulePeriodicBackup(ctx context.Context) func() error {
 	return func() error {
 		schedule := conf.Server.Backup.Schedule
 		if schedule == "" {
-			log.Warn("Periodic backup is DISABLED")
+			log.Info(ctx, "Periodic backup is DISABLED")
 			return nil
 		}
 
-		database := db.Db()
 		schedulerInstance := scheduler.GetInstance()
 
 		log.Info("Scheduling periodic backup", "schedule", schedule)
-		err := schedulerInstance.Add(schedule, func() {
+		_, err := schedulerInstance.Add(schedule, func() {
 			start := time.Now()
-			path, err := database.Backup(ctx)
+			path, err := db.Backup(ctx)
 			elapsed := time.Since(start)
 			if err != nil {
 				log.Error(ctx, "Error backing up database", "elapsed", elapsed, err)
@@ -176,7 +255,7 @@ func schedulePeriodicBackup(ctx context.Context) func() error {
 			}
 			log.Info(ctx, "Backup complete", "elapsed", elapsed, "path", path)
 
-			count, err := database.Prune(ctx)
+			count, err := db.Prune(ctx)
 			if err != nil {
 				log.Error(ctx, "Error pruning database", "error", err)
 			} else if count > 0 {
@@ -190,12 +269,46 @@ func schedulePeriodicBackup(ctx context.Context) func() error {
 	}
 }
 
+func scheduleDBOptimizer(ctx context.Context) func() error {
+	return func() error {
+		log.Info(ctx, "Scheduling DB optimizer", "schedule", consts.OptimizeDBSchedule)
+		schedulerInstance := scheduler.GetInstance()
+		_, err := schedulerInstance.Add(consts.OptimizeDBSchedule, func() {
+			if scanner.IsScanning() {
+				log.Debug(ctx, "Skipping DB optimization because a scan is in progress")
+				return
+			}
+			db.Optimize(ctx)
+		})
+		return err
+	}
+}
+
 // startScheduler starts the Navidrome scheduler, which is used to run periodic tasks.
 func startScheduler(ctx context.Context) func() error {
 	return func() error {
 		log.Info(ctx, "Starting scheduler")
 		schedulerInstance := scheduler.GetInstance()
 		schedulerInstance.Run(ctx)
+		return nil
+	}
+}
+
+// startInsightsCollector starts the Navidrome Insight Collector, if configured.
+func startInsightsCollector(ctx context.Context) func() error {
+	return func() error {
+		if !conf.Server.EnableInsightsCollector {
+			log.Info(ctx, "Insight Collector is DISABLED")
+			return nil
+		}
+		log.Info(ctx, "Starting Insight Collector")
+		select {
+		case <-time.After(conf.Server.DevInsightsInitialDelay):
+		case <-ctx.Done():
+			return nil
+		}
+		ic := CreateInsights()
+		ic.Run(ctx)
 		return nil
 	}
 }
@@ -211,6 +324,22 @@ func startPlaybackServer(ctx context.Context) func() error {
 		log.Info(ctx, "Starting Jukebox service")
 		playbackInstance := GetPlaybackServer()
 		return playbackInstance.Run(ctx)
+	}
+}
+
+// startPluginManager starts the plugin manager, if configured.
+func startPluginManager(ctx context.Context) func() error {
+	return func() error {
+		if !conf.Server.Plugins.Enabled {
+			log.Debug("Plugins are DISABLED")
+			return nil
+		}
+		log.Info(ctx, "Starting plugin manager")
+		// Get the manager instance and scan for plugins
+		manager := GetPluginManager(ctx)
+		manager.ScanPlugins()
+
+		return nil
 	}
 }
 

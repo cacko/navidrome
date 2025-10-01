@@ -3,13 +3,12 @@ package persistence
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	. "github.com/Masterminds/squirrel"
 	"github.com/deluan/rest"
-	"github.com/google/uuid"
 	"github.com/navidrome/navidrome/model"
+	"github.com/navidrome/navidrome/model/id"
 	"github.com/pocketbase/dbx"
 )
 
@@ -24,9 +23,6 @@ func NewRadioRepository(ctx context.Context, db dbx.Builder) model.RadioReposito
 	r.registerModel(&model.Radio{}, map[string]filterFunc{
 		"name": containsFilter("name"),
 	})
-	r.sortMappings = map[string]string{
-		"name": "(name collate nocase), name",
-	}
 	return r
 }
 
@@ -73,7 +69,7 @@ func (r *radioRepository) Put(radio *model.Radio) error {
 
 	if radio.ID == "" {
 		radio.CreatedAt = time.Now()
-		radio.ID = strings.ReplaceAll(uuid.NewString(), "-", "")
+		radio.ID = id.NewRandom()
 		values, _ = toSQLArgs(*radio)
 	} else {
 		values, _ = toSQLArgs(*radio)

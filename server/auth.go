@@ -12,12 +12,12 @@ import (
 
 	"github.com/deluan/rest"
 	"github.com/go-chi/jwtauth/v5"
-	"github.com/google/uuid"
 	"github.com/navidrome/navidrome/conf"
 	"github.com/navidrome/navidrome/consts"
 	"github.com/navidrome/navidrome/core/auth"
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
+	"github.com/navidrome/navidrome/model/id"
 	"github.com/navidrome/navidrome/model/request"
 	"github.com/navidrome/navidrome/utils/gravatar"
 	"golang.org/x/text/cases"
@@ -73,9 +73,6 @@ func buildAuthPayload(user *model.User) map[string]interface{} {
 	}
 	if conf.Server.EnableGravatar && user.Email != "" {
 		payload["avatar"] = gravatar.Url(user.Email, 50)
-	}
-	if conf.Server.LastFM.Enabled {
-		payload["lastFMApiKey"] = conf.Server.LastFM.ApiKey
 	}
 
 	bytes := make([]byte, 3)
@@ -137,7 +134,7 @@ func createAdminUser(ctx context.Context, ds model.DataStore, username, password
 	now := time.Now()
 	caser := cases.Title(language.Und)
 	initialUser := model.User{
-		ID:          uuid.NewString(),
+		ID:          id.NewRandom(),
 		UserName:    username,
 		Name:        caser.String(username),
 		Email:       "",
@@ -170,17 +167,17 @@ func validateLogin(userRepo model.UserRepository, userName, password string) (*m
 	return u, nil
 }
 
-// This method maps the custom authorization header to the default 'Authorization', used by the jwtauth library
-func authHeaderMapper(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		bearer := r.Header.Get(consts.UIAuthorizationHeader)
-		r.Header.Set("Authorization", bearer)
-		next.ServeHTTP(w, r)
-	})
+func JWTVerifier(next http.Handler) http.Handler {
+	return jwtauth.Verify(auth.TokenAuth, tokenFromHeader, jwtauth.TokenFromCookie, jwtauth.TokenFromQuery)(next)
 }
 
-func jwtVerifier(next http.Handler) http.Handler {
-	return jwtauth.Verify(auth.TokenAuth, jwtauth.TokenFromHeader, jwtauth.TokenFromCookie, jwtauth.TokenFromQuery)(next)
+func tokenFromHeader(r *http.Request) string {
+	// Get token from authorization header.
+	bearer := r.Header.Get(consts.UIAuthorizationHeader)
+	if len(bearer) > 7 && strings.ToUpper(bearer[0:6]) == "BEARER" {
+		return bearer[7:]
+	}
+	return ""
 }
 
 func UsernameFromToken(r *http.Request) string {
@@ -213,7 +210,16 @@ func UsernameFromReverseProxyHeader(r *http.Request) string {
 	return username
 }
 
-func UsernameFromConfig(r *http.Request) string {
+func InternalAuth(r *http.Request) string {
+	username, ok := request.InternalAuthFrom(r.Context())
+	if !ok {
+		return ""
+	}
+	log.Trace(r, "Found username in InternalAuth", "username", username)
+	return username
+}
+
+func UsernameFromConfig(*http.Request) string {
 	return conf.Server.DevAutoLoginUsername
 }
 
@@ -291,13 +297,17 @@ func handleLoginFromHeaders(ds model.DataStore, r *http.Request) map[string]inte
 	user, err := userRepo.FindByUsernameWithPassword(username)
 	if user == nil || err != nil {
 		log.Info(r, "User passed in header not found", "user", username)
+		// Check if this is the first user being created
+		count, _ := userRepo.CountAll()
+		isFirstUser := count == 0
+
 		newUser := model.User{
-			ID:          uuid.NewString(),
+			ID:          id.NewRandom(),
 			UserName:    username,
 			Name:        username,
 			Email:       "",
-			NewPassword: consts.PasswordAutogenPrefix + uuid.NewString(),
-			IsAdmin:     false,
+			NewPassword: consts.PasswordAutogenPrefix + id.NewRandom(),
+			IsAdmin:     isFirstUser, // Make the first user an admin
 		}
 		err := userRepo.Put(&newUser)
 		if err != nil {

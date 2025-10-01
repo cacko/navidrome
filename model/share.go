@@ -1,6 +1,7 @@
 package model
 
 import (
+	"cmp"
 	"strings"
 	"time"
 
@@ -48,8 +49,14 @@ func (s Share) CoverArtID() ArtworkID {
 
 type Shares []Share
 
+// ToM3U8 exports the share to the Extended M3U8 format.
+func (s Share) ToM3U8() string {
+	return s.Tracks.ToM3U8(cmp.Or(s.Description, s.ID), false)
+}
+
 type ShareRepository interface {
 	Exists(id string) (bool, error)
 	Get(id string) (*Share, error)
 	GetAll(options ...QueryOptions) (Shares, error)
+	CountAll(options ...QueryOptions) (int64, error)
 }

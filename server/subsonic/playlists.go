@@ -39,7 +39,7 @@ func (api *Router) GetPlaylist(r *http.Request) (*responses.Subsonic, error) {
 }
 
 func (api *Router) getPlaylist(ctx context.Context, id string) (*responses.Subsonic, error) {
-	pls, err := api.ds.Playlist(ctx).GetWithTracks(id, true)
+	pls, err := api.ds.Playlist(ctx).GetWithTracks(id, true, false)
 	if errors.Is(err, model.ErrNotFound) {
 		log.Error(ctx, err.Error(), "id", id)
 		return nil, newError(responses.ErrorDataNotFound, "playlist not found")
@@ -58,7 +58,7 @@ func (api *Router) getPlaylist(ctx context.Context, id string) (*responses.Subso
 }
 
 func (api *Router) create(ctx context.Context, playlistId, name string, ids []string) (string, error) {
-	err := api.ds.WithTx(func(tx model.DataStore) error {
+	err := api.ds.WithTxImmediate(func(tx model.DataStore) error {
 		owner := getUser(ctx)
 		var pls *model.Playlist
 		var err error
@@ -76,7 +76,7 @@ func (api *Router) create(ctx context.Context, playlistId, name string, ids []st
 			pls.OwnerID = owner.ID
 		}
 		pls.Tracks = nil
-		pls.AddTracks(ids)
+		pls.AddMediaFilesByID(ids)
 
 		err = tx.Playlist(ctx).Put(pls)
 		playlistId = pls.ID
@@ -131,14 +131,8 @@ func (api *Router) UpdatePlaylist(r *http.Request) (*responses.Subsonic, error) 
 	if s, err := p.String("name"); err == nil {
 		plsName = &s
 	}
-	var comment *string
-	if s, err := p.String("comment"); err == nil {
-		comment = &s
-	}
-	var public *bool
-	if p, err := p.Bool("public"); err == nil {
-		public = &p
-	}
+	comment := p.StringPtr("comment")
+	public := p.BoolPtr("public")
 
 	log.Debug(r, "Updating playlist", "id", playlistId)
 	if plsName != nil {

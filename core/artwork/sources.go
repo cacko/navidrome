@@ -10,13 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/dhowden/tag"
 	"github.com/navidrome/navidrome/consts"
-	"github.com/navidrome/navidrome/core"
+	"github.com/navidrome/navidrome/core/external"
 	"github.com/navidrome/navidrome/core/ffmpeg"
 	"github.com/navidrome/navidrome/log"
 	"github.com/navidrome/navidrome/model"
@@ -52,13 +53,9 @@ func (f sourceFunc) String() string {
 	return name
 }
 
-func splitList(s string) []string {
-	return strings.Split(s, consts.Zwsp)
-}
-
-func fromExternalFile(ctx context.Context, files string, pattern string) sourceFunc {
+func fromExternalFile(ctx context.Context, files []string, pattern string) sourceFunc {
 	return func() (io.ReadCloser, string, error) {
-		for _, file := range splitList(files) {
+		for _, file := range files {
 			_, name := filepath.Split(file)
 			match, err := filepath.Match(pattern, strings.ToLower(name))
 			if err != nil {
@@ -79,7 +76,14 @@ func fromExternalFile(ctx context.Context, files string, pattern string) sourceF
 	}
 }
 
-func fromTag(path string) sourceFunc {
+// These regexes are used to match the picture type in the file, in the order they are listed.
+var picTypeRegexes = []*regexp.Regexp{
+	regexp.MustCompile(`(?i).*cover.*front.*|.*front.*cover.*`),
+	regexp.MustCompile(`(?i).*front.*`),
+	regexp.MustCompile(`(?i).*cover.*`),
+}
+
+func fromTag(ctx context.Context, path string) sourceFunc {
 	return func() (io.ReadCloser, string, error) {
 		if path == "" {
 			return nil, "", nil
@@ -95,9 +99,30 @@ func fromTag(path string) sourceFunc {
 			return nil, "", err
 		}
 
-		picture := m.Picture()
-		if picture == nil {
+		types := m.PictureTypes()
+		if len(types) == 0 {
 			return nil, "", fmt.Errorf("no embedded image found in %s", path)
+		}
+
+		var picture *tag.Picture
+		for _, regex := range picTypeRegexes {
+			for _, t := range types {
+				if regex.MatchString(t) {
+					log.Trace(ctx, "Found embedded image", "type", t, "path", path)
+					picture = m.Pictures(t)
+					break
+				}
+			}
+			if picture != nil {
+				break
+			}
+		}
+		if picture == nil {
+			log.Trace(ctx, "Could not find a front image. Getting the first one", "type", types[0], "path", path)
+			picture = m.Picture()
+		}
+		if picture == nil {
+			return nil, "", fmt.Errorf("could not load embedded image from %s", path)
 		}
 		return io.NopCloser(bytes.NewReader(picture.Data)), path, nil
 	}
@@ -112,13 +137,7 @@ func fromFFmpegTag(ctx context.Context, ffmpeg ffmpeg.FFmpeg, path string) sourc
 		if err != nil {
 			return nil, "", err
 		}
-		defer r.Close()
-		buf := new(bytes.Buffer)
-		_, err = io.Copy(buf, r)
-		if err != nil {
-			return nil, "", err
-		}
-		return io.NopCloser(buf), path, nil
+		return r, path, nil
 	}
 }
 
@@ -138,9 +157,9 @@ func fromAlbumPlaceholder() sourceFunc {
 		return r, consts.PlaceholderAlbumArt, nil
 	}
 }
-func fromArtistExternalSource(ctx context.Context, ar model.Artist, em core.ExternalMetadata) sourceFunc {
+func fromArtistExternalSource(ctx context.Context, ar model.Artist, provider external.Provider) sourceFunc {
 	return func() (io.ReadCloser, string, error) {
-		imageUrl, err := em.ArtistImage(ctx, ar.ID)
+		imageUrl, err := provider.ArtistImage(ctx, ar.ID)
 		if err != nil {
 			return nil, "", err
 		}
@@ -149,9 +168,9 @@ func fromArtistExternalSource(ctx context.Context, ar model.Artist, em core.Exte
 	}
 }
 
-func fromAlbumExternalSource(ctx context.Context, al model.Album, em core.ExternalMetadata) sourceFunc {
+func fromAlbumExternalSource(ctx context.Context, al model.Album, provider external.Provider) sourceFunc {
 	return func() (io.ReadCloser, string, error) {
-		imageUrl, err := em.AlbumImage(ctx, al.ID)
+		imageUrl, err := provider.AlbumImage(ctx, al.ID)
 		if err != nil {
 			return nil, "", err
 		}
@@ -169,7 +188,7 @@ func fromURL(ctx context.Context, imageUrl *url.URL) (io.ReadCloser, string, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, "", fmt.Errorf("error retrieveing artwork from %s: %s", imageUrl, resp.Status)
+		return nil, "", fmt.Errorf("error retrieving artwork from %s: %s", imageUrl, resp.Status)
 	}
 	return resp.Body, imageUrl.String(), nil
 }

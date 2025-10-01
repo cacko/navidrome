@@ -32,18 +32,22 @@ var (
 	// Should either be at the beginning of file, or beginning of line
 	syncRegex  = regexp.MustCompile(`(^|\n)\s*` + timeRegexString)
 	timeRegex  = regexp.MustCompile(timeRegexString)
-	lrcIdRegex = regexp.MustCompile(`\[(ar|ti|offset):([^]]+)]`)
+	lrcIdRegex = regexp.MustCompile(`\[(ar|ti|offset|lang):([^]]+)]`)
 )
+
+func (l Lyrics) IsEmpty() bool {
+	return len(l.Line) == 0
+}
 
 func ToLyrics(language, text string) (*Lyrics, error) {
 	text = str.SanitizeText(text)
 
 	lines := strings.Split(text, "\n")
+	structuredLines := make([]Line, 0, len(lines)*2)
 
 	artist := ""
 	title := ""
 	var offset *int64 = nil
-	structuredLines := []Line{}
 
 	synced := syncRegex.MatchString(text)
 	priorLine := ""
@@ -68,6 +72,8 @@ func ToLyrics(language, text string) (*Lyrics, error) {
 				switch idTag[1] {
 				case "ar":
 					artist = str.SanitizeText(strings.TrimSpace(idTag[2]))
+				case "lang":
+					language = str.SanitizeText(strings.TrimSpace(idTag[2]))
 				case "offset":
 					{
 						off, err := strconv.ParseInt(strings.TrimSpace(idTag[2]), 10, 64)
@@ -105,7 +111,7 @@ func ToLyrics(language, text string) (*Lyrics, error) {
 						Value: strings.TrimSpace(priorLine),
 					})
 				}
-				timestamps = []int64{}
+				timestamps = nil
 			}
 
 			end := 0
@@ -171,7 +177,6 @@ func ToLyrics(language, text string) (*Lyrics, error) {
 		Offset:        offset,
 		Synced:        synced,
 	}
-
 	return &lyrics, nil
 }
 

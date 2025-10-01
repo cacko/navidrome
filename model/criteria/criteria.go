@@ -4,6 +4,7 @@ package criteria
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/Masterminds/squirrel"
@@ -24,45 +25,81 @@ func (c Criteria) OrderBy() string {
 	if c.Sort == "" {
 		c.Sort = "title"
 	}
-	f := fieldMap[strings.ToLower(c.Sort)]
-	var mapped string
-	if f == nil {
-		log.Error("Invalid field in 'sort' field. Using 'title'", "sort", c.Sort)
-		mapped = fieldMap["title"].field
-	} else {
-		if f.order == "" {
-			mapped = f.field
-		} else {
+
+	order := strings.ToLower(strings.TrimSpace(c.Order))
+	if order != "" && order != "asc" && order != "desc" {
+		log.Error("Invalid value in 'order' field. Valid values: 'asc', 'desc'", "order", c.Order)
+		order = ""
+	}
+
+	parts := strings.Split(c.Sort, ",")
+	fields := make([]string, 0, len(parts))
+
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+
+		dir := "asc"
+		if strings.HasPrefix(p, "+") || strings.HasPrefix(p, "-") {
+			if strings.HasPrefix(p, "-") {
+				dir = "desc"
+			}
+			p = strings.TrimSpace(p[1:])
+		}
+
+		sortField := strings.ToLower(p)
+		f := fieldMap[sortField]
+		if f == nil {
+			log.Error("Invalid field in 'sort' field", "sort", sortField)
+			continue
+		}
+
+		var mapped string
+
+		if f.order != "" {
 			mapped = f.order
-		}
-	}
-	if c.Order != "" {
-		if strings.EqualFold(c.Order, "asc") || strings.EqualFold(c.Order, "desc") {
-			mapped = mapped + " " + c.Order
+		} else if f.isTag {
+			mapped = "COALESCE(json_extract(media_file.tags, '$." + sortField + "[0].value'), '')"
+		} else if f.isRole {
+			mapped = "COALESCE(json_extract(media_file.participants, '$." + sortField + "[0].name'), '')"
 		} else {
-			log.Error("Invalid value in 'order' field. Valid values: 'asc', 'desc'", "order", c.Order)
+			mapped = f.field
 		}
+		if f.numeric {
+			mapped = fmt.Sprintf("CAST(%s AS REAL)", mapped)
+		}
+		// If the global 'order' field is set to 'desc', reverse the default or field-specific sort direction.
+		// This ensures that the global order applies consistently across all fields.
+		if order == "desc" {
+			if dir == "asc" {
+				dir = "desc"
+			} else {
+				dir = "asc"
+			}
+		}
+
+		fields = append(fields, mapped+" "+dir)
 	}
-	return mapped
+
+	return strings.Join(fields, ", ")
 }
 
-func (c Criteria) ToSql() (sql string, args []interface{}, err error) {
+func (c Criteria) ToSql() (sql string, args []any, err error) {
 	return c.Expression.ToSql()
 }
 
-func (c Criteria) ChildPlaylistIds() (ids []string) {
+func (c Criteria) ChildPlaylistIds() []string {
 	if c.Expression == nil {
-		return ids
+		return nil
 	}
 
-	switch rules := c.Expression.(type) {
-	case Any:
-		ids = rules.ChildPlaylistIds()
-	case All:
-		ids = rules.ChildPlaylistIds()
+	if parent := c.Expression.(interface{ ChildPlaylistIds() (ids []string) }); parent != nil {
+		return parent.ChildPlaylistIds()
 	}
 
-	return ids
+	return nil
 }
 
 func (c Criteria) MarshalJSON() ([]byte, error) {

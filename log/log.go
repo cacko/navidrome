@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"net/http"
 	"os"
 	"runtime"
@@ -202,6 +203,10 @@ func log(level Level, args ...interface{}) {
 	logger.Log(logrus.Level(level), msg)
 }
 
+func Writer() io.Writer {
+	return defaultLogger.Writer()
+}
+
 func shouldLog(requiredLevel Level, skip int) bool {
 	if currentLevel >= requiredLevel {
 		return true
@@ -277,6 +282,10 @@ func addFields(logger *logrus.Entry, keyValuePairs []interface{}) *logrus.Entry 
 					logger = logger.WithField(name, ShortDur(v))
 				case fmt.Stringer:
 					logger = logger.WithField(name, StringerValue(v))
+				case iter.Seq[string]:
+					logger = logger.WithField(name, formatSeq(v))
+				case []string:
+					logger = logger.WithField(name, formatSlice(v))
 				default:
 					logger = logger.WithField(name, v)
 				}
