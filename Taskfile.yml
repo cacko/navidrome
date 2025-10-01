@@ -30,7 +30,7 @@ tasks:
     desc: deploy
     cmds:
       - task: push
-      - task: pp
+      - task: pull
       - task: stop
       - ssh $REMOTE_HOST 'source ~/.zshrc;cd ~/src/{{.PROJECT}};task build;cp navidrome /store/navidrome/bin'
       - task: start
