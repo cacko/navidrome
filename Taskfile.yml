@@ -14,8 +14,7 @@ tasks:
       - git push || true
   pull:
     cmds:
-      - git reset --hard
-      - git pull
+      - ssh $REMOTE_HOST 'source ~/.zshrc;cd ~/src/{{.PROJECT}};git reset --hard;git pull'
   build:
     desc: build da shiut
     cmds:
