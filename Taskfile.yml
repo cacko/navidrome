@@ -19,7 +19,7 @@ tasks:
     desc: build da shiut
     cmds:
       - make setup
-      - make build
+      - NODE_OPTIONS=--max-old-space-size=8192 make build
   start:
     cmds:
       - ssh $REMOTE_HOST 'source ~/.zshrc;systemctl --user start {{.PROJECT}}'
