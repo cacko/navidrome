@@ -19,4 +19,10 @@ tasks:
   build:
     desc: build da shiut
     cmds:
-      - NODE_OPTIONS=--max-old-space-size=8192 make buildall
+      - task: pull
+      - make setup
+      - make build
+  deploy:
+    desc: deploy
+    cmds:
+      - ssh $REMOTE_HOST 'source ~/.zshrc;cd ~/src/{{.PROJECT}};task build;cp navidrome /store/navidrome/bin
