@@ -614,7 +614,7 @@
     "minutesAgo": "%{smart_count} minute ago |||| %{smart_count} minutes ago"
   },
   "help": {
-    "title": "Navidrome Hotkeys",
+    "title": "Hotkeys",
     "hotkeys": {
       "show_help": "Show This Help",
       "toggle_menu": "Toggle Menu Side Bar",
